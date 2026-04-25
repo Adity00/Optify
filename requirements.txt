@@ -1,0 +1,17 @@
+# Code quality metrics
+radon
+vulture
+autoflake
+libcst
+
+# Training stack
+trl
+unsloth
+transformers
+datasets
+accelerate
+
+# Testing + sandbox
+pytest
+pytest-timeout
+coverage
