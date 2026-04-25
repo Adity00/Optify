@@ -206,21 +206,24 @@ def diff_metrics(before: CodeMetrics, after: CodeMetrics) -> dict:
     """Compute deltas between *before* and *after* metrics for logging.
 
     Returns a dict with:
-        - ``loc_delta``        : positive → fewer lines (good)
-        - ``complexity_delta`` : positive → lower complexity (good)
-        - ``mi_delta``         : positive → better maintainability (good)
-        - ``dead_code_delta``  : positive → less dead code (good)
-        - ``improved``         : ``True`` if at least one metric improved
+        - ``loc_delta``           : positive → fewer lines (good)
+        - ``complexity_delta``    : positive → lower complexity (good)
+        - ``mi_delta``            : positive → better maintainability (good)
+        - ``dead_code_delta``     : positive → less dead code (good)
+        - ``unused_imports_delta``: positive → fewer unused imports (good)
+        - ``improved``            : ``True`` if at least one metric improved
     """
     return {
         "loc_delta": before.loc - after.loc,
         "complexity_delta": before.cyclomatic_complexity - after.cyclomatic_complexity,
         "mi_delta": after.maintainability_index - before.maintainability_index,
         "dead_code_delta": before.dead_code_lines - after.dead_code_lines,
+        "unused_imports_delta": before.unused_imports - after.unused_imports,
         "improved": bool(
             before.loc > after.loc
             or before.cyclomatic_complexity > after.cyclomatic_complexity
             or before.dead_code_lines > after.dead_code_lines
+            or before.unused_imports > after.unused_imports
         ),
     }
 

@@ -36,7 +36,7 @@ def test_reset():
     assert isinstance(obs, Observation)
     assert obs.baseline_metrics.loc > 0
     assert obs.metrics.loc == obs.baseline_metrics.loc
-    print("✓ env.reset() passed.")
+    print("[OK] env.reset() passed.")
 
 def test_revert():
     print("Testing REVERT action...")
@@ -57,14 +57,14 @@ def test_revert():
     # Revert
     env.step(json.dumps({"action": "revert"}))
     assert env.source_code == original_code
-    print("✓ REVERT action passed.")
+    print("[OK] REVERT action passed.")
 
 def verify_tasks():
     print("Verifying level_1 tasks...")
     for i in range(1, 6):
         task_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), f"../tasks/level_1/task_0{i}"))
         assert os.path.exists(task_dir)
-    print("✓ 5 level_1 tasks exist.")
+    print("[OK] 5 level_1 tasks exist.")
 
 if __name__ == "__main__":
     try:
