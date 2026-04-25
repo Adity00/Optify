@@ -5,14 +5,14 @@ from enum import Enum
 from typing import Tuple, List, Optional
 from uuid import uuid4
 import libcst as cst
-from radon.complexity import cc_visit
-from radon.metrics import mi_visit
+
 
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State as OpenEnvState
 
 from .state import Observation, CodeMetrics, TestResult
 from .sandbox import run_tests, apply_patch, run_code
+from .metrics import analyze_code
 
 class ActionType(Enum):
     APPLY_PATCH = "apply_patch"           # apply a code change
@@ -44,36 +44,13 @@ class CodeForgeEnv(Environment):
         self.baseline_metrics = None
         self.task = None
 
-    def analyze_code(self, code: str) -> CodeMetrics:
-        """
-        Uses radon and vulture to extract metrics.
-        """
-        loc = len(code.splitlines())
-        cc = 0.0
-        mi = 0.0
-        try:
-            blocks = cc_visit(code)
-            if blocks:
-                cc = sum(b.complexity for b in blocks) / len(blocks)
-            mi = mi_visit(code, multi=False)
-        except Exception:
-            pass
-            
-        # Vulture placeholder for dead code lines
-        dead_code_lines = 0 
-        
-        return CodeMetrics(
-            loc=loc,
-            cyclomatic_complexity=cc,
-            maintainability_index=mi,
-            dead_code_lines=dead_code_lines
-        )
+
 
     def reset(self, task) -> Observation:
         self._state = OpenEnvState(episode_id=str(uuid4()), step_count=0)
         self.task = task
         self.source_code = task.initial_code
-        self.baseline_metrics = self.analyze_code(self.source_code)
+        self.baseline_metrics = analyze_code(self.source_code)
         self.previous_attempts = []
         self.action_history = []
         self.history = [self.source_code] # Stack for revert
@@ -99,7 +76,7 @@ class CodeForgeEnv(Environment):
             # 1. parse_action(model_output)
             try:
                 action_data = json.loads(model_output)
-                action_type_str = action_data.get("type")
+                action_type_str = action_data.get("action")
                 action_type = ActionType(action_type_str)
                 patch = action_data.get("patch", "")
             except (json.JSONDecodeError, ValueError, KeyError) as e:
@@ -113,7 +90,7 @@ class CodeForgeEnv(Environment):
                 
                 with tempfile.TemporaryDirectory() as sandbox_dir:
                     test_result = run_tests(self.task.test_path, sandbox_dir)
-                metrics = self.analyze_code(self.source_code)
+                metrics = analyze_code(self.source_code)
                 
                 return self._finalize_step(test_result, metrics, reward=0.0)
 
@@ -130,7 +107,7 @@ class CodeForgeEnv(Environment):
                 test_result = run_tests(self.task.test_path, sandbox_dir)
 
             # 4. analyze_code(updated_code)
-            metrics = self.analyze_code(updated_code)
+            metrics = analyze_code(updated_code)
 
             # Update persistent state
             self.source_code = updated_code
@@ -183,7 +160,7 @@ class CodeForgeEnv(Environment):
         # Return state without updating source_code
         with tempfile.TemporaryDirectory() as sandbox_dir:
             test_result = run_tests(self.task.test_path, sandbox_dir)
-        metrics = self.analyze_code(self.source_code)
+        metrics = analyze_code(self.source_code)
         obs = Observation(
             source_code=self.source_code,
             test_result=test_result,

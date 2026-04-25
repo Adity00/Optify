@@ -1,5 +1,7 @@
 {
     "goal": "Fix the off-by-one error in get_element.",
     "baseline_loc": 5,
-    "baseline_complexity": 2.0
+    "baseline_complexity": 2.0,
+    "baseline_dead_code_lines": 0,
+    "baseline_unused_imports": 0
 }

@@ -21,7 +21,7 @@ import ast
 import os
 import subprocess
 import tempfile
-from dataclasses import dataclass
+
 
 from radon.complexity import cc_visit
 from radon.metrics import mi_visit
@@ -33,15 +33,7 @@ import vulture as _vulture_mod
 # 1. CodeMetrics dataclass
 # ---------------------------------------------------------------------------
 
-@dataclass
-class CodeMetrics:
-    """Container for static-analysis results of a single Python source string."""
-
-    loc: int                        # Lines of code (non-blank, non-comment)
-    cyclomatic_complexity: float    # Average cyclomatic complexity across all functions
-    maintainability_index: float    # Maintainability index (0–100 scale)
-    dead_code_lines: int            # Number of unused code lines detected by vulture
-    unused_imports: int             # Number of unused imports detected by autoflake
+from .state import CodeMetrics
 
 
 # ---------------------------------------------------------------------------

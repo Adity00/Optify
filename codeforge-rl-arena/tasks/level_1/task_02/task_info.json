@@ -1,5 +1,7 @@
 {
-    "goal": "Remove the unused import 'os'.",
+    "goal": "Optimize the area calculation to use math.pi and remove the unused import 'os'.",
     "baseline_loc": 5,
-    "baseline_complexity": 1.0
+    "baseline_complexity": 1.0,
+    "baseline_dead_code_lines": 0,
+    "baseline_unused_imports": 1
 }

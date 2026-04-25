@@ -1,5 +1,7 @@
 {
     "goal": "Fix the syntax error in greet.",
     "baseline_loc": 2,
-    "baseline_complexity": 1.0
+    "baseline_complexity": 1.0,
+    "baseline_dead_code_lines": 0,
+    "baseline_unused_imports": 0
 }

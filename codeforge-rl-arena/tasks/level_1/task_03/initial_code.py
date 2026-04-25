@@ -1,5 +1,6 @@
 def used_function(x):
-    return x + 1
+    # Bug: should be x + 1
+    return x + 2
 
 def unused_function():
     return "I am never used"

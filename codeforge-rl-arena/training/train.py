@@ -26,7 +26,11 @@ def main():
         random_state=3407,
     )
 
-    dataset = build_dataset()
+    from .dataset import load_tasks
+    import os
+    tasks_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../tasks"))
+    tasks = load_tasks(tasks_dir, level=1)
+    dataset = build_dataset(tasks)
 
     def correctness_reward(prompts, completions, **kwargs):
         # Extract code and evaluate via codeforge_env

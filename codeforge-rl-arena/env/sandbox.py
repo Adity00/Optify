@@ -6,6 +6,7 @@ import libcst as cst
 from typing import List, Tuple
 from .state import TestResult
 
+
 def run_code(source: str, timeout: int = 5) -> Tuple[str, str, int]:
     """
     Runs source code in a sandboxed temporary directory.
@@ -100,19 +101,46 @@ def apply_patch(source: str, patch: str, action_type: str) -> str:
     """
     result = source
     
-    if action_type in ["remove_dead_code", "rename_variable", "extract_function"]:
-        # Structural transformations using libcst
+    if action_type == "remove_dead_code":
+        # Use vulture to find dead lines
+        dead_lines = set()
+        with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
+            f.write(source)
+            tmp_path = f.name
         try:
-            # Placeholder for actual transformer logic
-            # For now, we just ensure it's a valid CST
-            tree = cst.parse_module(source)
-            # In a real environment, we would apply a specific Transformer here
-            result = source # (Assume transformation happened or use patch as new content)
-            if action_type == "apply_patch":
-                result = patch
-        except cst.ParserSyntaxError:
-            raise SyntaxError("Initial source has syntax errors")
-            
+            v_result = subprocess.run(["vulture", tmp_path], capture_output=True, text=True)
+            for line in v_result.stdout.strip().split('\n'):
+                if line and ':' in line:
+                    try:
+                        line_num = int(line.split(':')[1])
+                        dead_lines.add(line_num)
+                    except ValueError:
+                        pass
+        finally:
+            os.unlink(tmp_path)
+        
+        if dead_lines:
+            class DeadCodeRemover(cst.CSTTransformer):
+                METADATA_DEPENDENCIES = (cst.metadata.PositionProvider,)
+                
+                def __init__(self, lines_to_remove):
+                    self.lines_to_remove = lines_to_remove
+                    
+                def on_leave(self, original_node, updated_node):
+                    if isinstance(original_node, (cst.SimpleStatementLine, cst.FunctionDef, cst.ClassDef)):
+                        pos = self.get_metadata(cst.metadata.PositionProvider, original_node)
+                        if pos.start.line in self.lines_to_remove:
+                            return cst.RemoveFromParent()
+                    return updated_node
+
+            try:
+                tree = cst.parse_module(source)
+                wrapper = cst.metadata.MetadataWrapper(tree)
+                transformer = DeadCodeRemover(dead_lines)
+                result = wrapper.visit(transformer).code
+            except Exception:
+                pass
+                
     elif action_type == "apply_patch":
         # Line-based deletions or simple string replacements
         # Using string diff logic (simplified here as direct replacement if patch provided)
