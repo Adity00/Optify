@@ -1,7 +1,9 @@
 spec_version: 1
 name: codeforge_env
-type: space
+version: "0.1.0"
+description: "CodeForge code execution and analysis environment"
 runtime: fastapi
 app: server.app:app
 port: 8000
-
+action: CodeforgeAction
+observation: CodeforgeObservation
