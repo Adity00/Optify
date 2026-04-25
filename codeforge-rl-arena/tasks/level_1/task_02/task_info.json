@@ -1,0 +1,5 @@
+{
+    "goal": "Remove the unused import 'os'.",
+    "baseline_loc": 5,
+    "baseline_complexity": 1.0
+}
