@@ -1,0 +1,5 @@
+{
+    "goal": "Optimize sum_even by removing the redundant list creation.",
+    "baseline_loc": 7,
+    "baseline_complexity": 3.0
+}
