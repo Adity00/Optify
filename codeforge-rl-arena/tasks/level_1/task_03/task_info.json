@@ -1,0 +1,7 @@
+{
+    "goal": "Remove the unused function 'unused_function'.",
+    "baseline_loc": 7,
+    "baseline_complexity": 1.0,
+    "baseline_dead_code_lines": 3,
+    "baseline_unused_imports": 0
+}
