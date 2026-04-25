@@ -1,0 +1,16 @@
+# Training stack — CUDA required, Colab only
+unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+trl
+transformers
+accelerate
+bitsandbytes
+wandb
+datasets
+
+# Also needed in Colab for reward + env pipeline
+radon
+vulture
+autoflake
+libcst
+pytest
+pytest-timeout
