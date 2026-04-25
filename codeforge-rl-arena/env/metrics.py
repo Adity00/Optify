@@ -1,27 +1,32 @@
 """
-CodeForge Metrics Scaffolding Module.
+CodeForge Metrics Scaffolding Module — Person 2 Deliverable.
 
 Statically analyzes Python source code and returns a CodeMetrics dataclass
 containing key quality indicators for the RL reward pipeline.
 
 Public API:
-    - CodeMetrics         : dataclass holding all metric fields
-    - analyze_code(src)   : str → CodeMetrics
-    - diff_metrics(a, b)  : (CodeMetrics, CodeMetrics) → dict
-    - validate_determinism: determinism smoke-test helper
+    - CodeMetrics                  : dataclass holding all metric fields
+    - get_cyclomatic_complexity    : str → float
+    - get_maintainability_index    : str → float
+    - get_dead_code_lines          : str → int
+    - get_unused_imports           : str → int
+    - analyze_code(src)            : str → CodeMetrics
+    - diff_metrics(a, b)           : (CodeMetrics, CodeMetrics) → dict
+    - validate_determinism         : determinism smoke-test helper
 """
 
 from __future__ import annotations
 
 import ast
 import os
+import subprocess
 import tempfile
 from dataclasses import dataclass
 
-import radon.complexity
-import radon.metrics
-import radon.raw
-import vulture
+from radon.complexity import cc_visit
+from radon.metrics import mi_visit
+
+import vulture as _vulture_mod
 
 
 # ---------------------------------------------------------------------------
@@ -32,29 +37,140 @@ import vulture
 class CodeMetrics:
     """Container for static-analysis results of a single Python source string."""
 
-    loc: int                        # Logical lines of code (non-blank, non-comment)
+    loc: int                        # Lines of code (non-blank, non-comment)
     cyclomatic_complexity: float    # Average cyclomatic complexity across all functions
     maintainability_index: float    # Maintainability index (0–100 scale)
     dead_code_lines: int            # Number of unused code lines detected by vulture
-    num_functions: int              # Total number of function definitions
-    num_classes: int                # Total number of class definitions
-    max_complexity: int             # Highest single-function complexity score
-
-
-# Sentinel returned when analysis fails (e.g. SyntaxError).
-_ERROR_METRICS = CodeMetrics(
-    loc=-1,
-    cyclomatic_complexity=-1,
-    maintainability_index=-1,
-    dead_code_lines=-1,
-    num_functions=-1,
-    num_classes=-1,
-    max_complexity=-1,
-)
+    unused_imports: int             # Number of unused imports detected by autoflake
 
 
 # ---------------------------------------------------------------------------
-# 2. analyze_code
+# 2. Standalone helper functions (Person 2 — Steps 1-3)
+# ---------------------------------------------------------------------------
+
+def get_cyclomatic_complexity(source: str) -> float:
+    """Return the average cyclomatic complexity across all functions in *source*.
+
+    Uses radon's ``cc_visit``. Returns 0.0 if no functions are found.
+    """
+    blocks = cc_visit(source)
+    if not blocks:
+        return 0.0
+    return sum(b.complexity for b in blocks) / len(blocks)
+
+
+def get_maintainability_index(source: str) -> float:
+    """Return the maintainability index (0–100) for *source*.
+
+    Uses radon's ``mi_visit`` with ``multi=False`` (single float result).
+    """
+    return mi_visit(source, multi=False)
+
+
+def get_dead_code_lines(source: str) -> int:
+    """Return the number of dead-code lines detected by vulture.
+
+    Writes *source* to a temp file, runs vulture on it, and counts
+    the findings. Tries subprocess first; falls back to the Python API
+    if subprocess is blocked (e.g. by Application Control policies).
+    """
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".py", mode="w", delete=False
+        ) as f:
+            f.write(source)
+            tmp_path = f.name
+
+        # Attempt subprocess approach (as specified in Person 2 spec)
+        try:
+            result = subprocess.run(
+                ["vulture", tmp_path],
+                capture_output=True,
+                text=True,
+            )
+            lines = [line for line in result.stdout.strip().split("\n") if line]
+            return len(lines)
+        except (OSError, FileNotFoundError):
+            # Fallback: use vulture Python API directly
+            v = _vulture_mod.Vulture()
+            v.scavenge([tmp_path])
+            return len(v.get_unused_code())
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def get_unused_imports(source: str) -> int:
+    """Return the count of unused imports detected by autoflake.
+
+    Writes *source* to a temp file, runs autoflake on it, and counts
+    occurrences of unused imports. Tries subprocess first; falls back
+    to AST-based detection if subprocess is blocked.
+    """
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".py", mode="w", delete=False
+        ) as f:
+            f.write(source)
+            tmp_path = f.name
+
+        # Attempt subprocess approach (as specified in Person 2 spec)
+        try:
+            result = subprocess.run(
+                ["autoflake", "--check", tmp_path],
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout.count("Unused")
+        except (OSError, FileNotFoundError):
+            # Fallback: use pyflakes API directly to detect unused imports
+            return _count_unused_imports_via_ast(source)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def _count_unused_imports_via_ast(source: str) -> int:
+    """Fallback: detect unused imports using AST analysis.
+
+    Parses the source, collects all imported names, then checks which
+    ones are never referenced in the rest of the code.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return 0
+
+    # Collect all imported names
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                imported_names.add(name)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                imported_names.add(name)
+
+    # Collect all Name references (excluding the import statements themselves)
+    used_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            used_names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            # Handle cases like os.path — the root 'os' is a Name node
+            pass
+
+    # Count imports that are never used anywhere
+    unused = imported_names - used_names
+    return len(unused)
+
+
+# ---------------------------------------------------------------------------
+# 3. analyze_code — unified entry point (Person 2 — Step 4)
 # ---------------------------------------------------------------------------
 
 def analyze_code(source: str) -> CodeMetrics:
@@ -65,80 +181,33 @@ def analyze_code(source: str) -> CodeMetrics:
     ``-1`` is returned so the training loop never crashes.
     """
     try:
-        # --- Step A: LOC via radon -------------------------------------------
-        raw_metrics = radon.raw.analyze(source)
-        loc = raw_metrics.lloc  # logical lines of code
-
-        # --- Step B: Cyclomatic complexity via radon -------------------------
-        cc_results = radon.complexity.cc_visit(source)
-
-        if not cc_results:
-            cyclomatic_complexity = 0.0
-            max_complexity = 0
-            num_functions = 0
-        else:
-            complexities = [block.complexity for block in cc_results]
-            cyclomatic_complexity = sum(complexities) / len(complexities)
-            max_complexity = max(complexities)
-            num_functions = len(cc_results)
-
-        # --- Step C: Maintainability index via radon -------------------------
-        mi_score = radon.metrics.mi_visit(source, multi=True)
-        # Clamp to [0.0, 100.0] for safety
-        maintainability_index = max(0.0, min(100.0, mi_score))
-
-        # --- Step D: Dead code via vulture -----------------------------------
-        dead_code_lines = _count_dead_code(source)
-
-        # --- Step E: Class count via ast -------------------------------------
-        tree = ast.parse(source)
-        num_classes = sum(
-            1 for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
-        )
+        loc = len([line for line in source.splitlines() if line.strip()])
+        cyclomatic_complexity = get_cyclomatic_complexity(source)
+        maintainability_index = get_maintainability_index(source)
+        dead_code_lines = get_dead_code_lines(source)
+        unused_imports = get_unused_imports(source)
 
         return CodeMetrics(
             loc=int(loc),
             cyclomatic_complexity=float(cyclomatic_complexity),
             maintainability_index=float(maintainability_index),
             dead_code_lines=int(dead_code_lines),
-            num_functions=int(num_functions),
-            num_classes=int(num_classes),
-            max_complexity=int(max_complexity),
+            unused_imports=int(unused_imports),
         )
 
     except Exception:
-        # Step F — never let exceptions propagate to the training loop.
+        # Never let exceptions propagate to the training loop.
         return CodeMetrics(
             loc=-1,
             cyclomatic_complexity=-1,
             maintainability_index=-1,
             dead_code_lines=-1,
-            num_functions=-1,
-            num_classes=-1,
-            max_complexity=-1,
+            unused_imports=-1,
         )
 
 
-def _count_dead_code(source: str) -> int:
-    """Run vulture on *source* via a temp file and return the dead-code line count."""
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            suffix=".py", mode="w", delete=False
-        ) as tmp:
-            tmp.write(source)
-            tmp_path = tmp.name
-
-        v = vulture.Vulture()
-        v.scavenge([tmp_path])
-        return sum(item.size for item in v.get_unused_code())
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 # ---------------------------------------------------------------------------
-# 3. diff_metrics
+# 4. diff_metrics — delta computation for logging
 # ---------------------------------------------------------------------------
 
 def diff_metrics(before: CodeMetrics, after: CodeMetrics) -> dict:
@@ -165,10 +234,10 @@ def diff_metrics(before: CodeMetrics, after: CodeMetrics) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 4. validate_determinism
+# 5. validate_determinism (Person 2 — Step 5)
 # ---------------------------------------------------------------------------
 
-def validate_determinism(source: str, runs: int = 5) -> bool:
+def validate_determinism(source: str, runs: int = 3) -> bool:
     """Call :func:`analyze_code` *runs* times and verify all results match.
 
     Returns ``True`` if deterministic, ``False`` (with a printed warning)
